@@ -33,9 +33,3 @@ __pycache__/
 test/fixtures/local/
 oura-metrics-*.md
 *.local.*
-
-# Headless CLI build output (generated, like main.js)
-bin/
-
-# Generated attachments from bin/oura-metrics.mjs — real data, regenerable, never committed.
-/context/

@@ -3,9 +3,9 @@
  *
  * The HTTP call is injected rather than imported. Inside Obsidian the plugin
  * passes `requestUrl`, which is not subject to the renderer's CORS policy and
- * works identically on mobile; the headless CLI passes `fetch`. Keeping the
- * import out of this module is what lets it be bundled for Node at all — an
- * `import ... from 'obsidian'` here would make the whole dependency chain,
+ * works identically on mobile; the headless CLI in petrograph passes `fetch`.
+ * Keeping the import out of this module is what lets it run under Node at all —
+ * an `import ... from 'obsidian'` here would make the whole dependency chain,
  * metrics and rendering included, unloadable outside the app.
  *
  * Only the four collections that carry the metrics we report are fetched. The
@@ -26,21 +26,6 @@ export type OuraTransport = (request: {
 	url: string;
 	headers: Record<string, string>;
 }) => Promise<OuraResponse>;
-
-/** `fetch`-backed transport, for Node. Obsidian supplies its own from `requestUrl`. */
-export const fetchTransport: OuraTransport = async ({ url, headers }) => {
-	const response = await fetch(url, { headers });
-	// Read the body before checking status: the error branches below don't use it,
-	// but a 4xx with a JSON body would otherwise leave the stream unconsumed.
-	const text = await response.text();
-	let json: unknown = null;
-	try {
-		json = text ? JSON.parse(text) : null;
-	} catch {
-		json = null;
-	}
-	return { status: response.status, json };
-};
 
 /** Collections we read. Each is a date-windowed, `next_token`-paginated list. */
 export type Collection = 'sleep' | 'daily_sleep' | 'daily_activity' | 'daily_readiness';

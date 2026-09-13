@@ -9,27 +9,6 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = process.argv[2] === 'production';
-const cliOnly = process.argv[2] === 'cli';
-
-// The headless CLI: the same metrics and rendering, Node instead of Obsidian. A
-// separate entry point rather than a flag on the plugin bundle because the two
-// have opposite externals — the plugin leaves `obsidian` unresolved for the app
-// to supply at runtime, and a Node build must not reference it at all.
-if (cliOnly) {
-	await esbuild.build({
-		banner: { js: '#!/usr/bin/env node\n' + banner },
-		entryPoints: ['src/cli.ts'],
-		bundle: true,
-		platform: 'node',
-		format: 'esm',
-		target: 'node18',
-		external: [...builtinModules, ...builtinModules.map((m) => `node:${m}`)],
-		logLevel: 'info',
-		treeShaking: true,
-		outfile: 'bin/oura-metrics.mjs',
-	});
-	process.exit(0);
-}
 
 const context = await esbuild.context({
 	banner: {

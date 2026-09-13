@@ -8,8 +8,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "vitest run",
-		"install:vault": "npm run build && node scripts/install-vault.mjs",
-		"build:cli": "node esbuild.config.mjs cli && chmod +x bin/oura-metrics.mjs"
+		"install:vault": "npm run build && node scripts/install-vault.mjs"
 	},
 	"license": "MIT",
 	"devDependencies": {

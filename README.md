@@ -82,32 +82,12 @@ is saved in the vault's plugin data, so a personal prompt never touches the repo
 
 ### Headless, for automation
 
-```bash
-npm run build:cli                                 # → bin/oura-metrics.mjs
-./bin/oura-metrics.mjs --days 7 --out oura.md     # 7 days vs the 3 weeks before them
-./bin/oura-metrics.mjs --days 28                  # to stdout
-./bin/oura-metrics.mjs --days 7 --baseline-weeks 0  # no comparison period
-```
-
-`--days` is the window printed day by day; `--baseline-weeks` (default 3) is how much
-history is fetched behind it to compare against. With fewer than three baseline days —
-a new ring, or `--baseline-weeks 0` — the note falls back to the window being its own
-baseline, and says so.
-
-Same metrics, same rendering — the CLI calls the very same `buildDays` and
-`renderNote` the plugin does. That is the point: if the two ever diverged, the
-note reaching a model would stop being the note you have reviewed by eye. The
-only thing it reimplements is the HTTP call, since Obsidian's `requestUrl` does
-not exist outside the app; `OuraClient` takes its transport as a constructor
-argument so neither side has to import the other's.
-
-Token resolution, first hit wins: `--token`, then `$OURA_TOKEN`, then the
-plugin's own `data.json` inside the vault. The vault comes from `--vault`,
-`$OBSIDIAN_VAULT`, or `.vault-path`. It emits no prompt template — the CLI's
-output is meant to be an attachment inside a larger bundle that carries its own
-instructions, and a second set would conflict.
-
-`bin/` is gitignored, like `main.js`.
+The headless CLI lives in [petrograph](https://github.com/altosaar/petrograph)
+(`tools/oura_metrics.ts`), which pins this repo as a submodule and calls the very
+same `buildDays` and `renderNote` the plugin does — so the note reaching a model
+is the note you have reviewed by eye. `OuraClient` takes its HTTP transport as a
+constructor argument, so the plugin passes `requestUrl` and the CLI passes
+`fetch` without either importing the other's.
 
 ## Three things that are easy to get wrong
 

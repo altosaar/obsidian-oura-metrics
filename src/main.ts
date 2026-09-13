@@ -60,7 +60,11 @@ export default class OuraMetricsPlugin extends Plugin {
 	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			(await this.loadData()) as Partial<OuraMetricsSettings> | null,
+		);
 	}
 
 	async saveSettings() {

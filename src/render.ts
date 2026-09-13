@@ -1,7 +1,6 @@
 /** Render derived metrics as the markdown note that gets pasted into an LLM. */
 
 import {
-	type Baseline,
 	type DayMetrics,
 	TRACKED,
 	baselineOf,
