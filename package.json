@@ -1,0 +1,22 @@
+{
+	"name": "obsidian-oura-metrics",
+	"version": "0.1.0",
+	"description": "Oura sleep and activity metrics as an LLM-ready markdown summary.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run",
+		"install:vault": "npm run build && node scripts/install-vault.mjs",
+		"build:cli": "node esbuild.config.mjs cli && chmod +x bin/oura-metrics.mjs"
+	},
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^22.15.17",
+		"esbuild": "0.25.5",
+		"obsidian": "latest",
+		"typescript": "^5.8.3",
+		"vitest": "^2.1.8"
+	}
+}

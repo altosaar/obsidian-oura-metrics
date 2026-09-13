@@ -1,0 +1,5 @@
+.oura-metrics-prompt textarea {
+	width: 100%;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}

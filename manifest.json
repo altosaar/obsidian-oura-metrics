@@ -1,0 +1,10 @@
+{
+	"id": "oura-metrics",
+	"name": "Oura Metrics",
+	"version": "0.1.0",
+	"minAppVersion": "1.6.0",
+	"description": "Summarize Oura sleep, heart-rate and activity metrics into one LLM-ready note — 7, 14, or 28 days, compared against the weeks before.",
+	"author": "Jaan Altosaar",
+	"authorUrl": "https://github.com/altosaar",
+	"isDesktopOnly": false
+}
