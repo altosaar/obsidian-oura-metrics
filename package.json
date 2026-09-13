@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-oura-metrics",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Oura sleep and activity metrics as an LLM-ready markdown summary.",
 	"main": "main.js",
 	"type": "module",
