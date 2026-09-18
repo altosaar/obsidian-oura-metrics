@@ -1,9 +1,16 @@
-import { App, PluginSettingTab, type SettingDefinitionItem } from 'obsidian';
+import { App, PluginSettingTab, type ButtonComponent, type SettingDefinitionItem } from 'obsidian';
 import type OuraMetricsPlugin from './main';
+import { REDIRECT_URI, isExpired } from './oauth';
 
 export interface OuraMetricsSettings {
-	/** Oura personal access token. Stored in the vault's plugin data, never in git. */
-	token: string;
+	/** Client ID of the user's own Oura OAuth application. */
+	clientId: string;
+	/** OAuth access token. Stored in the vault's plugin data, never in git. */
+	accessToken: string;
+	/** Epoch ms when `accessToken` expires; 0 when unknown. */
+	tokenExpiresAt: number;
+	/** `state` of the authorization in flight, persisted in case the app restarts mid-flow. */
+	oauthState: string;
 	/** Folder the dated notes are written to. Empty means vault root. */
 	outputFolder: string;
 	/** Window the ribbon icon uses, in days. */
@@ -27,7 +34,10 @@ Please:
 Don't manufacture a pattern if the data doesn't support one.`;
 
 export const DEFAULT_SETTINGS: OuraMetricsSettings = {
-	token: '',
+	clientId: '',
+	accessToken: '',
+	tokenExpiresAt: 0,
+	oauthState: '',
 	outputFolder: 'oura',
 	defaultDays: 14,
 	threshold: 1.5,
@@ -38,6 +48,9 @@ export const DEFAULT_SETTINGS: OuraMetricsSettings = {
 };
 
 export class OuraMetricsSettingTab extends PluginSettingTab {
+	/** Set while the account row is on screen, so a finished connection can update it. */
+	private repaintAccount: (() => void) | undefined;
+
 	constructor(
 		app: App,
 		private readonly plugin: OuraMetricsPlugin,
@@ -48,26 +61,46 @@ export class OuraMetricsSettingTab extends PluginSettingTab {
 	getSettingDefinitions(): SettingDefinitionItem[] {
 		return [
 			{
-				name: 'Personal access token',
+				name: 'Client ID',
 				desc: createFragment((f) => {
-					f.appendText('Create one at ');
+					f.appendText('Register an application at ');
 					f.createEl('a', {
-						text: 'cloud.ouraring.com/personal-access-tokens',
-						href: 'https://cloud.ouraring.com/personal-access-tokens',
+						text: 'cloud.ouraring.com/oauth/applications',
+						href: 'https://cloud.ouraring.com/oauth/applications',
 					});
-					f.appendText('. Stored in this vault’s plugin data.');
+					f.appendText(' with the redirect URI ');
+					f.createEl('code', { text: REDIRECT_URI });
+					f.appendText(', then paste its client ID. No client secret is needed.');
 				}),
-				// Rendered by hand: the declarative text control can't mask its input.
+				control: { type: 'text', key: 'clientId', placeholder: 'client ID' },
+			},
+			{
+				name: 'Oura account',
 				render: (setting) => {
-					setting.addText((text) => {
-						text.inputEl.type = 'password';
-						text.setPlaceholder('paste token')
-							.setValue(this.plugin.settings.token)
-							.onChange(async (value) => {
-								this.plugin.settings.token = value.trim();
-								await this.plugin.saveSettings();
-							});
-					});
+					let connect: ButtonComponent | undefined;
+					let disconnect: ButtonComponent | undefined;
+					setting
+						.addButton((button) => {
+							connect = button
+								.setCta()
+								.onClick(() => void this.plugin.startAuthorization());
+						})
+						.addButton((button) => {
+							disconnect = button
+								.setButtonText('Disconnect')
+								.onClick(() => void this.plugin.disconnect());
+						});
+
+					this.repaintAccount = () => {
+						const { accessToken, tokenExpiresAt } = this.plugin.settings;
+						setting.setDesc(accountStatus(accessToken, tokenExpiresAt, Date.now()));
+						connect?.setButtonText(accessToken ? 'Reconnect' : 'Connect');
+						disconnect?.buttonEl.toggle(accessToken !== '');
+					};
+					this.repaintAccount();
+					return () => {
+						this.repaintAccount = undefined;
+					};
 				},
 			},
 			{
@@ -128,6 +161,9 @@ export class OuraMetricsSettingTab extends PluginSettingTab {
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		const settings = this.plugin.settings;
 		switch (key) {
+			case 'clientId':
+				settings.clientId = String(value).trim();
+				break;
 			case 'outputFolder':
 				settings.outputFolder = String(value).trim().replace(/^\/+|\/+$/g, '');
 				break;
@@ -145,4 +181,18 @@ export class OuraMetricsSettingTab extends PluginSettingTab {
 			this.plugin.syncSearchExclusion();
 		}
 	}
+
+	/** Bring the account row up to date after connecting or disconnecting. */
+	refreshAccount(): void {
+		this.repaintAccount?.();
+	}
+}
+
+function accountStatus(accessToken: string, expiresAt: number, now: number): string {
+	if (!accessToken) return 'Not connected.';
+	if (!expiresAt) return 'Connected.';
+	const date = new Date(expiresAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
+	return isExpired(expiresAt, now)
+		? `Access expired ${date}. Reconnect to keep generating notes.`
+		: `Connected until ${date}. Oura’s client-side flow can’t renew access, so reconnect then.`;
 }

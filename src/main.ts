@@ -14,6 +14,14 @@ import {
 	type DailyScore,
 	type SleepPeriod,
 } from './oura';
+import {
+	PROTOCOL_ACTION,
+	authorizeUrl,
+	fieldsFromProtocol,
+	isExpired,
+	newState,
+	parseAuthorizationResponse,
+} from './oauth';
 import { DEFAULT_BASELINE_WEEKS, buildDays, splitWindow } from './metrics';
 import { renderNote } from './render';
 
@@ -34,6 +42,7 @@ const WINDOWS: SummaryWindow[] = [
 
 export default class OuraMetricsPlugin extends Plugin {
 	settings!: OuraMetricsSettings;
+	private settingTab!: OuraMetricsSettingTab;
 
 	async onload() {
 		await this.loadSettings();
@@ -53,22 +62,73 @@ export default class OuraMetricsPlugin extends Plugin {
 			});
 		}
 
-		this.addSettingTab(new OuraMetricsSettingTab(this.app, this));
+		// Oura redirects to obsidian://oura-metrics#access_token=… after consent.
+		this.registerObsidianProtocolHandler(PROTOCOL_ACTION, (params) => {
+			void this.completeAuthorization(fieldsFromProtocol(params));
+		});
+
+		this.settingTab = new OuraMetricsSettingTab(this.app, this);
+		this.addSettingTab(this.settingTab);
 		this.syncSearchExclusion();
 	}
 
 	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<OuraMetricsSettings> | null,
-		);
+		const saved = ((await this.loadData()) ?? {}) as Partial<OuraMetricsSettings> & {
+			token?: unknown;
+		};
+		// `token` held a personal access token; Oura retired those in December 2025.
+		const { token: legacyToken, ...current } = saved;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, current);
+		if (legacyToken !== undefined) await this.saveSettings();
+	}
+
+	/** data.json changed outside the app — `npm run install:vault` writing the client ID, or sync. */
+	async onExternalSettingsChange() {
+		await this.loadSettings();
+		this.settingTab.refreshAccount();
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	/** Send the user to Oura's consent page; the answer comes back via the protocol handler. */
+	async startAuthorization(): Promise<void> {
+		const { clientId } = this.settings;
+		if (!clientId) {
+			new Notice('Oura Metrics: add your Oura application’s client ID first.', 8000);
+			return;
+		}
+		this.settings.oauthState = newState();
+		await this.saveSettings();
+		window.open(authorizeUrl(clientId, this.settings.oauthState));
+	}
+
+	/** Store the access token from Oura's redirect, or say why it was refused. */
+	async completeAuthorization(fields: URLSearchParams): Promise<void> {
+		try {
+			const grant = parseAuthorizationResponse(fields, this.settings.oauthState, Date.now());
+			this.settings.accessToken = grant.accessToken;
+			this.settings.tokenExpiresAt = grant.expiresAt;
+			this.settings.oauthState = '';
+			await this.saveSettings();
+		} catch (err) {
+			// Field names only: the values include the token.
+			console.warn('Oura Metrics: authorization response rejected; fields:', [...fields.keys()], err);
+			new Notice(`Oura Metrics: ${err instanceof Error ? err.message : String(err)}`, 12000);
+			return;
+		}
+		this.settingTab.refreshAccount();
+		new Notice('Oura Metrics: connected to Oura.');
+	}
+
+	async disconnect(): Promise<void> {
+		this.settings.accessToken = '';
+		this.settings.tokenExpiresAt = 0;
+		await this.saveSettings();
+		this.settingTab.refreshAccount();
 	}
 
 	private defaultWindow(): SummaryWindow {
@@ -84,8 +144,12 @@ export default class OuraMetricsPlugin extends Plugin {
 
 	/** Fetch, derive, render, then write & open oura-metrics-YYYY-MM-DD.md. */
 	async generate(summaryWindow: SummaryWindow): Promise<void> {
-		if (!this.settings.token) {
-			new Notice('Oura Metrics: add a personal access token in settings first.', 8000);
+		if (!this.settings.accessToken) {
+			new Notice('Oura Metrics: connect your Oura account in settings first.', 8000);
+			return;
+		}
+		if (isExpired(this.settings.tokenExpiresAt, Date.now())) {
+			new Notice('Oura Metrics: Oura access has expired. Reconnect in settings.', 8000);
 			return;
 		}
 
@@ -108,7 +172,7 @@ export default class OuraMetricsPlugin extends Plugin {
 			// `requestUrl` rather than `fetch`: not subject to the renderer's CORS
 			// policy, and identical on mobile. `throw: false` because OuraClient
 			// turns statuses into messages a user can act on.
-			const client = new OuraClient(this.settings.token, (request) =>
+			const client = new OuraClient(this.settings.accessToken, (request) =>
 				requestUrl({ ...request, throw: false }),
 			);
 			const [sleep, dailySleep, dailyActivity, dailyReadiness] = await Promise.all([
@@ -141,8 +205,8 @@ export default class OuraMetricsPlugin extends Plugin {
 		} catch (err) {
 			console.error('Oura Metrics: generation failed', err);
 			const detail =
-				err instanceof OuraApiError
-					? err.message
+				err instanceof OuraApiError && err.status === 401
+					? `${err.message} Reconnect in settings.`
 					: err instanceof Error
 						? err.message
 						: String(err);

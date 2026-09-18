@@ -33,3 +33,7 @@ __pycache__/
 test/fixtures/local/
 oura-metrics-*.md
 *.local.*
+
+# OAuth application credentials
+.env
+.env.*

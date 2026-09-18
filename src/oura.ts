@@ -8,6 +8,10 @@
  * an `import ... from 'obsidian'` here would make the whole dependency chain,
  * metrics and rendering included, unloadable outside the app.
  *
+ * The token is an OAuth2 access token with the `daily` scope (personal access
+ * tokens were retired in December 2025). How it is obtained is the caller's
+ * business — the plugin runs the flow in `oauth.ts` — so this client only sends it.
+ *
  * Only the four collections that carry the metrics we report are fetched. The
  * per-collection field subset is applied when deriving metrics, not here — we
  * keep the raw documents intact so a field can be added without touching this.
@@ -69,7 +73,15 @@ export interface DailyActivity extends DailyScore {
 	met?: { interval?: number; items?: (number | null)[] } | null;
 }
 
-export class OuraApiError extends Error {}
+export class OuraApiError extends Error {
+	constructor(
+		message: string,
+		/** The HTTP status Oura answered with, so callers can say what to do about it. */
+		readonly status: number,
+	) {
+		super(message);
+	}
+}
 
 export class OuraClient {
 	constructor(
@@ -93,13 +105,19 @@ export class OuraClient {
 			});
 
 			if (response.status === 401) {
-				throw new OuraApiError('Unauthorized — check the personal access token in settings.');
+				throw new OuraApiError('Unauthorized — the access token is invalid, expired or revoked.', 401);
+			}
+			if (response.status === 403) {
+				throw new OuraApiError(
+					'Forbidden — the token lacks the daily scope, or the Oura membership has lapsed.',
+					403,
+				);
 			}
 			if (response.status === 429) {
-				throw new OuraApiError('Rate limited by Oura. Wait a minute and try again.');
+				throw new OuraApiError('Rate limited by Oura. Wait a minute and try again.', 429);
 			}
 			if (response.status >= 400) {
-				throw new OuraApiError(`${collection}: HTTP ${response.status}`);
+				throw new OuraApiError(`${collection}: HTTP ${response.status}`, response.status);
 			}
 
 			const body = response.json as { data?: T[]; next_token?: string | null };

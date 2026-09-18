@@ -60,14 +60,35 @@ npm run install:vault    # builds, then copies into the vault in .vault-path
 
 `.vault-path` is a gitignored one-line file holding the absolute path to your
 vault (or set `OBSIDIAN_VAULT`). Then enable **Oura Metrics** in Settings →
-Community plugins, and paste a token from
-[cloud.ouraring.com/personal-access-tokens](https://cloud.ouraring.com/personal-access-tokens).
+Community plugins.
 
-The token lives in the vault's plugin data (`.obsidian/plugins/oura-metrics/data.json`),
+### Connecting to Oura
+
+> **Breaking in 0.2.0:** Oura retired personal access tokens in December 2025, and
+> the plugin now connects through OAuth. The old token setting is gone and is
+> deleted from plugin data on first load; connect once as below.
+
+1. Register an application at
+   [cloud.ouraring.com/oauth/applications](https://cloud.ouraring.com/oauth/applications).
+   Set the redirect URI to `obsidian://oura-metrics` and tick Daily, Personal,
+   Heartrate, Workout, Tag, Session, SpO2 and Heart Health. For a personal app, the
+   repo URL is fine as website, privacy policy and terms.
+2. Paste its **client ID** into the plugin's settings. Alternatively, put
+   `OURA_CLIENT_ID=…` in a gitignored `.env` here and `npm run install:vault` writes it in.
+3. Click **Connect** and submit Oura's consent page. Obsidian reopens and settings
+   show **Connected until …**.
+
+The plugin uses Oura's client-side (implicit) flow, so it needs no client secret and
+nothing is hosted: Oura hands the token straight back to Obsidian. The cost is no
+refresh token. Access lasts 30 days, then you click **Reconnect**.
+
+Only `daily` (sleep, activity, readiness) is read today. The other scopes are requested
+up front so later metrics don't need new consent, and you can decline them.
+
+The access token lives in the vault's plugin data (`.obsidian/plugins/oura-metrics/data.json`),
 never in git. It is stored in plaintext — Obsidian gives a plugin nowhere else to
 persist settings — so if your vault syncs to a cloud service, the token syncs with it.
-It is a read-only credential; revoke it at
-[cloud.ouraring.com](https://cloud.ouraring.com/personal-access-tokens) if needed.
+It is read-only and expires in 30 days; **Disconnect** forgets it sooner.
 
 ## Use
 
@@ -75,7 +96,7 @@ Tap the ribbon icon, or run **Generate summary (last 7 days / 2 weeks / 4 weeks)
 from the command palette. A dated note — `oura/oura-metrics-YYYY-MM-DD.md` —
 opens, ready to copy.
 
-Settings cover the token, output folder, default window, deviation threshold,
+Settings cover the Oura connection, output folder, default window, deviation threshold,
 whether the output folder is excluded from search, and the prompt template that
 leads each note (placeholders: `{{date}}`, `{{time}}`, `{{window}}`). The prompt
 is saved in the vault's plugin data, so a personal prompt never touches the repo.
@@ -85,8 +106,8 @@ is saved in the vault's plugin data, so a personal prompt never touches the repo
 The headless CLI lives in [petrograph](https://github.com/altosaar/petrograph)
 (`tools/oura_metrics.ts`), which pins this repo as a submodule and calls the very
 same `buildDays` and `renderNote` the plugin does — so the note reaching a model
-is the note you have reviewed by eye. `OuraClient` takes its HTTP transport as a
-constructor argument, so the plugin passes `requestUrl` and the CLI passes
+is the note you have reviewed by eye. `OuraClient` takes an OAuth access token and its HTTP transport as
+constructor arguments, so the plugin passes `requestUrl` and the CLI passes
 `fetch` without either importing the other's.
 
 ## Three things that are easy to get wrong
